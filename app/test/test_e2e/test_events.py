@@ -4,7 +4,7 @@ import re
 from django.utils import timezone
 from playwright.sync_api import expect
 
-from app.models import Event, User, Venue
+from app.models import Event, User, Venue, Category
 
 from app.test.test_e2e.base import BaseE2ETest
 
@@ -31,6 +31,13 @@ class EventBaseTest(BaseE2ETest):
             is_organizer=False,
         )
 
+        # Crear una categoría para las pruebas
+        self.category = Category.objects.create(
+            name="Categoría de prueba",
+            description="Descripción de la categoría de prueba",
+            is_active=True
+        )
+
         # Crear un venue para las pruebas
         self.venue = Venue.objects.create(
             name="Venue de prueba",
@@ -48,7 +55,8 @@ class EventBaseTest(BaseE2ETest):
             description="Descripción del evento 1",
             scheduled_at=event_date1,
             organizer=self.organizer,
-            venue=self.venue
+            venue=self.venue,
+            category=self.category
         )
 
         # Evento 2
@@ -58,7 +66,8 @@ class EventBaseTest(BaseE2ETest):
             description="Descripción del evento 2",
             scheduled_at=event_date2,
             organizer=self.organizer,
-            venue=self.venue
+            venue=self.venue,
+            category=self.category
         )
 
     def _table_has_event_info(self):
@@ -237,9 +246,11 @@ class EventCRUDTest(EventBaseTest):
         self.page.get_by_label("Fecha").fill("2025-06-15")
         self.page.get_by_label("Hora").fill("16:45")
         self.page.get_by_label("Lugar").select_option(label=f"{self.venue.name} ({self.venue.city}) - Capacidad: {self.venue.capacity}")
+        self.page.get_by_label("Categoría").select_option(label=self.category.name)
 
         # Enviar el formulario
-        self.page.get_by_role("button", name="Crear Evento").click()
+        self.page.locator('.card-body form button[type="submit"]').click()
+        self.page.wait_for_load_state("networkidle")
 
         # Verificar que redirigió a la página de eventos
         expect(self.page).to_have_url(f"{self.live_server_url}/events/")
@@ -291,8 +302,12 @@ class EventCRUDTest(EventBaseTest):
         venue = self.page.get_by_label("Lugar")
         expect(venue).to_have_value(str(self.venue.id))
 
+        category = self.page.get_by_label("Categoría")
+        expect(category).to_have_value(str(self.category.id))
+
         # Enviar el formulario
-        self.page.get_by_role("button", name="Guardar Cambios").click()
+        self.page.locator('.card-body form button[type="submit"]').click()
+        self.page.wait_for_load_state("networkidle")
 
         # Verificar que redirigió a la página de eventos
         expect(self.page).to_have_url(f"{self.live_server_url}/events/")
