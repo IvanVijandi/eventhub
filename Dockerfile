@@ -23,30 +23,6 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=bind,source=requirements.txt,target=requirements.txt \
     python -m pip install -r requirements.txt
 
-# Crea un usuario sin privilegios bajo el cual se ejecutará la aplicación.
-# Consulta https://docs.docker.com/go/dockerfile-user-best-practices/
-#ARG UID=10001
-#RUN adduser \
-#    --disabled-password \
-#    --gecos "" \
-#    --home "/nonexistent" \
-#    --shell "/sbin/nologin" \
-#    --no-create-home \
-#    --uid "${UID}" \
-#    appuser
-
-# Copia los archivos como root primero
-# COPY --chown=appuser:appuser . .
-
-# Asegura permisos para la base de datos
-#RUN mkdir -p /app/ && \
-#    touch /app/db.sqlite3 && \
-#    chown appuser:appuser /app/db.sqlite3 && \
-#    chmod 664 /app/db.sqlite3
-
-# Cambia al usuario sin privilegios para ejecutar la aplicación.
-# USER appuser
-
 # Copia el código fuente al contenedor.
 COPY . .
 
