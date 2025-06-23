@@ -25,7 +25,7 @@ class OversellingPreventionTest(BaseE2ETest):
             name="Estadio de Prueba",
             adress="Calle de Prueba 123",
             city="Ciudad de Prueba",
-            capacity=1000
+            capacity=3
         )
 
         # Crear un evento que use la localización anterior
@@ -38,31 +38,15 @@ class OversellingPreventionTest(BaseE2ETest):
             venue=self.venue
         )
 
-        # Crear un ticket con quantity 4
-        self.ticket = Ticket.objects.create(
-            quantity=4,
-            type="GENERAL",
-            event=self.event,
-            user=self.regular_user
-        )
-
     def test_cannot_exceed_remaining_capacity(self):
         """Test que verifica que no se pueden comprar más tickets que los disponibles después de compras previas"""
         self.login_user("usuario", "password123")
-
-        # Primera compra de tickets
-        self.page.goto(f"{self.live_server_url}/events/{self.event.id}/buy-ticket/")
-        self.page.wait_for_selector("#quantity")
-        self.page.fill("#quantity", "2")
-        self.page.get_by_label("Tipo de entrada").select_option("GENERAL")
-        self.complete_card_data_in_buy_ticket_form()
-        self.page.get_by_role("button", name="Confirmar compra").click()
-        self.page.wait_for_load_state("networkidle")
         
-        # Segunda compra de tickets
         self.page.goto(f"{self.live_server_url}/events/{self.event.id}/buy-ticket/")
         self.page.wait_for_selector("#quantity")
-        self.page.fill("#quantity", "999") 
+        self.page.fill("#quantity", "4") 
         self.page.get_by_label("Tipo de entrada").select_option("GENERAL")
         self.complete_card_data_in_buy_ticket_form()
         self.page.get_by_role("button", name="Confirmar compra").click()
+        error_message = self.page.locator(".alert")
+        expect(error_message).to_have_text("No hay suficientes entradas disponibles. Solo quedan 3 entradas.")

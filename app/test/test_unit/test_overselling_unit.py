@@ -53,12 +53,11 @@ class TestOverselling(TestCase):
         # Verificar que es un error de cantidad
         self.assertFalse(success)
         self.assertIsInstance(result, dict)
-        if isinstance(result, dict):
-            self.assertIn('quantity', result)
-            self.assertEqual(
-                result['quantity'],
-                'No hay suficientes entradas disponibles. Solo quedan 1 entradas.'
-            )
+        self.assertIn('quantity', result)
+        self.assertEqual(
+            result['quantity'],
+            'No hay suficientes entradas disponibles. Solo quedan 1 entradas.'
+        )
 
     def test_cannot_buy_tickets_when_event_is_full(self):
         """Verifica que no se puedan comprar entradas cuando el evento está lleno"""
@@ -83,12 +82,11 @@ class TestOverselling(TestCase):
         # Verificar que es un error de evento lleno
         self.assertFalse(success2)
         self.assertIsInstance(result, dict)
-        if isinstance(result, dict):
-            self.assertIn('event', result)
-            self.assertEqual(
-                result['event'],
-                'Lo sentimos, este evento ya no tiene entradas disponibles'
-            )
+        self.assertIn('event', result)
+        self.assertEqual(
+            result['event'],
+            'Lo sentimos, este evento ya no tiene entradas disponibles'
+        )
 
     def test_multiple_tickets_respect_capacity(self):
         """Verifica que múltiples compras de tickets respeten la capacidad total"""
@@ -108,9 +106,8 @@ class TestOverselling(TestCase):
         # Verificar que es un error de cantidad insuficiente
         self.assertFalse(success2)
         self.assertIsInstance(result, dict)
-        if isinstance(result, dict):
-            self.assertIn('event', result)
-            self.assertEqual(
-                result['event'],
-                'Lo sentimos, este evento ya no tiene entradas disponibles'
-            )
+        self.assertIn('event', result)
+        self.assertEqual(
+            result['event'],
+            'Lo sentimos, este evento ya no tiene entradas disponibles'
+        )
