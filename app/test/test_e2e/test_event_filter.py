@@ -66,12 +66,8 @@ class EventFilterE2ETest(BaseE2ETest):
         event_titles_locators = self.page.locator("table tbody tr")
         expect(event_titles_locators).to_have_count(2, timeout=10000)  # Esperar 2 eventos (futuro y actual)
 
-        # Obtener los textos de los títulos visibles
-        event_titles_text = [row.locator("td").first.inner_text() for row in event_titles_locators.all()]
-        
-        self.assertNotIn("Evento pasado", event_titles_text)
-        self.assertIn("Evento futuro", event_titles_text)
-        self.assertIn("Evento actual", event_titles_text)
+        # Usar expect de Playwright para verificar los textos exactos y la ausencia de 'Evento pasado'
+        expect(self.page.locator("table tbody tr td:first-child")).to_have_text(["Evento actual", "Evento futuro"])
 
     def test_events_are_ordered_by_date(self):
         """Test que verifica que los eventos están ordenados por fecha"""
