@@ -171,8 +171,9 @@ class SatisfactionSurveyIntegrationTest(TestCase):
         
         # Debe redirigir o mostrar mensaje de encuesta ya completada
         self.assertIn(response.status_code, [302, 200])
-        if response.status_code == 200:
-            self.assertContains(response, 'ya has completado')
+        self.assertTrue(
+            response.status_code == 302 or 'ya has completado' in response.content.decode()
+        )
 
     def test_satisfaction_survey_authentication_required(self):
         """Test que se requiere autenticación para acceder a la encuesta"""

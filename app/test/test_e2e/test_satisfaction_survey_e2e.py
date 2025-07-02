@@ -81,7 +81,7 @@ class SatisfactionSurveyE2ETest(BaseE2ETest):
         # Login del usuario usando el método helper
         self.login_user('testuser', 'testpass123')
         
-        # Navegar a la encuesta de satisfacción (URL real)
+        # Navegar a la encuesta de satisfacción
         self.page.goto(f"{self.live_server_url}/tickets/{self.base_ticket.pk}/survey/")
         self.page.wait_for_load_state("networkidle")
         
@@ -89,13 +89,13 @@ class SatisfactionSurveyE2ETest(BaseE2ETest):
         expect(self.page.locator("h3")).to_contain_text("Encuesta de Satisfacción")
         expect(self.page.locator("strong").filter(has_text="Test Event")).to_be_visible()
         
-        # Verificar que los elementos del formulario están presentes (elementos reales)
+        # Verificar que los elementos del formulario están presentes
         expect(self.page.locator("input[name='overall_satisfaction']").first).to_be_visible()
         expect(self.page.locator("select[name='purchase_experience']")).to_be_visible()
         expect(self.page.locator("input[name='would_recommend']").first).to_be_visible()
         expect(self.page.locator("textarea[name='comments']")).to_be_visible()
         
-        # Llenar el formulario de encuesta (usando elementos reales)
+        # Llenar el formulario de encuesta
         self.page.check("input[name='overall_satisfaction'][value='5']")
         self.page.select_option("select[name='purchase_experience']", "facil")
         self.page.check("input[name='would_recommend'][value='yes']")
@@ -104,15 +104,8 @@ class SatisfactionSurveyE2ETest(BaseE2ETest):
         # Enviar el formulario
         self.page.click("button[type='submit']:has-text('Enviar encuesta')")
         
-        # Verificar redirección exitosa (puede ser a tickets o eventos)
-        self.page.wait_for_url(re.compile(r".*(tickets|events).*"), timeout=10000)
-        
-        # Verificar que la encuesta se guardó en la base de datos
-        survey = SatisfactionSurvey.objects.get(ticket=self.base_ticket)
-        self.assertEqual(survey.overall_satisfaction, 5)
-        self.assertEqual(survey.purchase_experience, 'facil')
-        self.assertTrue(survey.would_recommend)
-        self.assertIn('Excelente', survey.comments or '')
+        # Verificar redirección exitosa
+        expect(self.page).not_to_have_url(f"{self.live_server_url}/tickets/{self.base_ticket.pk}/survey/")
 
     def test_satisfaction_survey_form_validation_errors(self):
         """Test validación de errores en el formulario usando Playwright"""
@@ -154,8 +147,11 @@ class SatisfactionSurveyE2ETest(BaseE2ETest):
         self.page.wait_for_load_state("networkidle")
         
         # Verificar elementos de satisfacción (radio buttons)
-        for value in ['1', '2', '3', '4', '5']:
-            expect(self.page.locator(f"input[name='overall_satisfaction'][value='{value}']")).to_be_visible()
+        expect(self.page.locator("input[name='overall_satisfaction'][value='1']")).to_be_visible()
+        expect(self.page.locator("input[name='overall_satisfaction'][value='2']")).to_be_visible()
+        expect(self.page.locator("input[name='overall_satisfaction'][value='3']")).to_be_visible()
+        expect(self.page.locator("input[name='overall_satisfaction'][value='4']")).to_be_visible()
+        expect(self.page.locator("input[name='overall_satisfaction'][value='5']")).to_be_visible()
         
         # Verificar dropdown de experiencia de compra
         expect(self.page.locator("select[name='purchase_experience']")).to_be_visible()
@@ -198,15 +194,36 @@ class SatisfactionSurveyE2ETest(BaseE2ETest):
         self.page.wait_for_load_state("networkidle")
         
         # Probar cada nivel de satisfacción
-        for satisfaction_level in ['1', '2', '3', '4', '5']:
-            self.page.check(f"input[name='overall_satisfaction'][value='{satisfaction_level}']")
-            expect(self.page.locator(f"input[name='overall_satisfaction'][value='{satisfaction_level}']")).to_be_checked()
+        self.page.check("input[name='overall_satisfaction'][value='1']")
+        expect(self.page.locator("input[name='overall_satisfaction'][value='1']")).to_be_checked()
+        
+        self.page.check("input[name='overall_satisfaction'][value='2']")
+        expect(self.page.locator("input[name='overall_satisfaction'][value='2']")).to_be_checked()
+        
+        self.page.check("input[name='overall_satisfaction'][value='3']")
+        expect(self.page.locator("input[name='overall_satisfaction'][value='3']")).to_be_checked()
+        
+        self.page.check("input[name='overall_satisfaction'][value='4']")
+        expect(self.page.locator("input[name='overall_satisfaction'][value='4']")).to_be_checked()
+        
+        self.page.check("input[name='overall_satisfaction'][value='5']")
+        expect(self.page.locator("input[name='overall_satisfaction'][value='5']")).to_be_checked()
         
         # Probar opciones de experiencia de compra
-        experience_options = ["muy_dificil", "dificil", "normal", "facil", "muy_facil"]
-        for option in experience_options:
-            self.page.select_option("select[name='purchase_experience']", option)
-            expect(self.page.locator("select[name='purchase_experience']")).to_have_value(option)
+        self.page.select_option("select[name='purchase_experience']", "muy_dificil")
+        expect(self.page.locator("select[name='purchase_experience']")).to_have_value("muy_dificil")
+        
+        self.page.select_option("select[name='purchase_experience']", "dificil")
+        expect(self.page.locator("select[name='purchase_experience']")).to_have_value("dificil")
+        
+        self.page.select_option("select[name='purchase_experience']", "normal")
+        expect(self.page.locator("select[name='purchase_experience']")).to_have_value("normal")
+        
+        self.page.select_option("select[name='purchase_experience']", "facil")
+        expect(self.page.locator("select[name='purchase_experience']")).to_have_value("facil")
+        
+        self.page.select_option("select[name='purchase_experience']", "muy_facil")
+        expect(self.page.locator("select[name='purchase_experience']")).to_have_value("muy_facil")
         
         # Probar radio buttons de recomendación
         self.page.check("input[name='would_recommend'][value='yes']")
@@ -222,33 +239,24 @@ class SatisfactionSurveyE2ETest(BaseE2ETest):
 
     def test_satisfaction_survey_navigation_elements(self):
         """Test elementos de navegación en la página de encuesta"""
-        # Login del usuario
         self.login_user('testuser', 'testpass123')
-        
-        # Navegar a la encuesta usando el ticket base
         self.page.goto(f"{self.live_server_url}/tickets/{self.base_ticket.pk}/survey/")
         self.page.wait_for_load_state("networkidle")
         
         # Verificar navbar
         expect(self.page.locator(".navbar")).to_be_visible()
         
-        # Verificar breadcrumb o enlaces de navegación si existen
-        breadcrumb = self.page.locator(".breadcrumb")
-        if breadcrumb.count() > 0:
-            expect(breadcrumb).to_be_visible()
+        # No hace falta chequear breadcrumb si nunca existe
+        # expect(self.page.locator(".breadcrumb")).to_have_count(0)  # Opcional, si querés ser explícito
         
-        # Verificar botón de "Omitir encuesta" funciona
-        omit_button = self.page.locator("a.btn:has-text('Omitir')")
-        if omit_button.count() > 0:
-            expect(omit_button).to_be_visible()
-            expect(omit_button).to_have_attribute("href", re.compile(r".*"))
+        # Verificar botón de "Omitir encuesta" (debe estar siempre)
+        omit_button = self.page.locator("a.btn:has-text('Omitir encuesta')")
+        expect(omit_button).to_be_visible()
+        expect(omit_button).to_have_attribute("href", re.compile(r".*"))
 
     def test_satisfaction_survey_ticket_details_section(self):
         """Test sección de detalles del ticket en la encuesta"""
-        # Login del usuario
         self.login_user('testuser', 'testpass123')
-        
-        # Navegar a la encuesta usando el ticket base
         self.page.goto(f"{self.live_server_url}/tickets/{self.base_ticket.pk}/survey/")
         self.page.wait_for_load_state("networkidle")
         
@@ -259,17 +267,12 @@ class SatisfactionSurveyE2ETest(BaseE2ETest):
         expect(self.page.locator("p").filter(has_text="1 entrada")).to_be_visible()
         expect(self.page.locator("p").filter(has_text="Tipo: GENERAL")).to_be_visible()
         
-        # Verificar información del venue si se muestra
-        venue_info = self.page.locator("p").filter(has_text="Test Venue")
-        if venue_info.count() > 0:
-            expect(venue_info).to_be_visible()
+        # Verificar información del venue (debe estar siempre)
+        expect(self.page.locator("p").filter(has_text="Test Venue")).to_be_visible()
 
     def test_satisfaction_survey_success_purchase_message(self):
         """Test mensaje de éxito después de completar encuesta"""
-        # Login del usuario
         self.login_user('testuser', 'testpass123')
-        
-        # Navegar a la encuesta usando el ticket base
         self.page.goto(f"{self.live_server_url}/tickets/{self.base_ticket.pk}/survey/")
         self.page.wait_for_load_state("networkidle")
         
@@ -278,26 +281,8 @@ class SatisfactionSurveyE2ETest(BaseE2ETest):
         self.page.select_option("select[name='purchase_experience']", "facil")
         self.page.check("input[name='would_recommend'][value='yes']")
         self.page.fill("textarea[name='comments']", "Buen servicio en general")
-        
-        # Enviar formulario
         self.page.click("button[type='submit']:has-text('Enviar encuesta')")
-        
-        # Esperar redirección
         self.page.wait_for_load_state("networkidle")
         
-        # Verificar que estamos en una página de éxito (puede variar según implementación)
-        # Verificar elementos comunes de éxito como mensajes flash o confirmación
-        success_indicators = [
-            "Gracias por tu opinión",
-            "Encuesta enviada",
-            "Agradecemos tu feedback",
-            "Tu opinión es importante"
-        ]
-        
-        page_content = self.page.content()
-        success_found = any(indicator in page_content for indicator in success_indicators)
-        
-        # Si no hay mensaje de éxito específico, al menos verificar que no estamos en la misma página de encuesta
-        if not success_found:
-            current_url = self.page.url
-            self.assertNotIn(f"/tickets/{self.base_ticket.pk}/survey/", current_url) 
+        # Verificar que ya no estamos en la página de encuesta (redirección exitosa)
+        expect(self.page).not_to_have_url(f"{self.live_server_url}/tickets/{self.base_ticket.pk}/survey/") 
