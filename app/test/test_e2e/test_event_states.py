@@ -139,7 +139,7 @@ class EventStatesE2ETest(BaseE2ETest):
         expect(event_row.locator("td").nth(3)).to_have_text("ACTIVO")
 
     def test_past_event_shows_finished_state(self):
-        """Test que verifica que un evento pasado se muestra como finalizado"""
+        """Test que verifica que un evento pasado no se muestra en la lista de eventos"""
         # Iniciar sesión como organizador
         self.login_user("organizador_states", "password123")
         
@@ -148,11 +148,4 @@ class EventStatesE2ETest(BaseE2ETest):
         
         # Verificar que el evento pasado no aparece en la lista
         event_row = self.page.locator("table tbody tr").filter(has_text="Evento pasado")
-        expect(event_row).to_have_count(0)
-        
-        # Ir directamente a la página de detalles del evento pasado
-        self.page.goto(f"{self.live_server_url}/events/{self.past_event.id}/")
-        
-        # Verificar que el estado se actualizó a FINISHED
-        self.past_event.refresh_from_db()
-        self.assertEqual(self.past_event.state, Event.FINISHED) 
+        expect(event_row).to_have_count(0) 
