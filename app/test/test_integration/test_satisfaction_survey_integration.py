@@ -53,7 +53,15 @@ class SatisfactionSurveyIntegrationTest(TestCase):
             user=self.user
         )
 
-        # Encuesta de satisfacción para tests
+        # Ticket adicional para el test de completar encuesta
+        self.ticket_for_survey = Ticket.objects.create(
+            quantity=1,
+            type='VIP',
+            event=self.event,
+            user=self.user
+        )
+
+        # Encuesta de satisfacción para tests (usando el primer ticket)
         self.survey = SatisfactionSurvey.objects.create(
             ticket=self.ticket,
             user=self.user,
@@ -71,7 +79,7 @@ class SatisfactionSurveyIntegrationTest(TestCase):
         
         # Acceder al formulario de encuesta
         response = self.client.get(
-            reverse('satisfaction_survey', kwargs={'ticket_id': self.ticket.id})
+            reverse('satisfaction_survey', kwargs={'ticket_id': self.ticket_for_survey.id})
         )
         
         self.assertEqual(response.status_code, 200)
@@ -86,15 +94,15 @@ class SatisfactionSurveyIntegrationTest(TestCase):
         }
         
         response = self.client.post(
-            reverse('satisfaction_survey', kwargs={'ticket_id': self.ticket.id}),
+            reverse('satisfaction_survey', kwargs={'ticket_id': self.ticket_for_survey.id}),
             data=form_data
         )
         
         # Verificar redirección exitosa
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 302)  # Redirección después de enviar
         
         # Verificar que la encuesta se creó
-        survey = SatisfactionSurvey.objects.get(ticket=self.ticket)
+        survey = SatisfactionSurvey.objects.get(ticket=self.ticket_for_survey)
         self.assertEqual(survey.overall_satisfaction, 5)
         self.assertEqual(survey.purchase_experience, 'facil')
         self.assertTrue(survey.would_recommend)

@@ -39,7 +39,7 @@ class SatisfactionSurveyE2ETest(BaseE2ETest):
             venue=self.venue
         )
 
-        # Ticket para encuesta
+        # Ticket para encuesta (usado para el test de resultados)
         self.ticket = Ticket.objects.create(
             quantity=1,
             type='GENERAL',
@@ -47,7 +47,15 @@ class SatisfactionSurveyE2ETest(BaseE2ETest):
             user=self.user
         )
 
-        # Encuesta de satisfacción para tests
+        # Ticket adicional para el test de completar encuesta
+        self.ticket_for_survey = Ticket.objects.create(
+            quantity=2,
+            type='VIP',
+            event=self.event,
+            user=self.user
+        )
+
+        # Encuesta de satisfacción para tests (usando el primer ticket)
         self.survey = SatisfactionSurvey.objects.create(
             ticket=self.ticket,
             user=self.user,
@@ -64,7 +72,7 @@ class SatisfactionSurveyE2ETest(BaseE2ETest):
         self.login_user('testuser', 'testpass123')
         
         # Navegar a la encuesta de satisfacción
-        self.page.goto(f"{self.live_server_url}/tickets/{self.ticket.pk}/survey/")
+        self.page.goto(f"{self.live_server_url}/tickets/{self.ticket_for_survey.pk}/survey/")
         self.page.wait_for_load_state("networkidle")
         
         # Verificar que la página de encuesta cargó correctamente
@@ -81,7 +89,7 @@ class SatisfactionSurveyE2ETest(BaseE2ETest):
         self.page.click("button[type='submit']:has-text('Enviar encuesta')")
         
         # Verificar redirección exitosa
-        expect(self.page).not_to_have_url(f"{self.live_server_url}/tickets/{self.ticket.pk}/survey/")
+        expect(self.page).not_to_have_url(f"{self.live_server_url}/tickets/{self.ticket_for_survey.pk}/survey/")
 
     def test_organizer_views_survey_results(self):
         """Test que verifica que un organizador puede ver los resultados de las encuestas"""

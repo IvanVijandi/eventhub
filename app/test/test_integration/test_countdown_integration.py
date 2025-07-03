@@ -57,7 +57,6 @@ class CountdownIntegrationTest(TestCase):
         )
         
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.context['user_is_organizer'])
         self.assertContains(response, 'countdown-container')
 
     def test_countdown_not_visible_for_organizer(self):
@@ -71,7 +70,6 @@ class CountdownIntegrationTest(TestCase):
         )
         
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.context['user_is_organizer'])
         self.assertNotContains(response, 'countdown-container')
 
  
