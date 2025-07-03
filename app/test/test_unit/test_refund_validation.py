@@ -1,5 +1,3 @@
-# app/test/test_unit/test_refund_validation.py (Tu archivo actual)
-
 from django.test import TestCase
 from django.utils import timezone
 import datetime
@@ -10,7 +8,7 @@ class RefundValidationUnitTest(TestCase):
     """Tests unitarios para la validación de solicitudes de reembolso"""
 
     def setUp(self):
-        # Crear usuario
+        # Crear usuario (el mismo para todas las solicitudes)
         self.user = User.objects.create_user(
             username="usuario_test",
             email="usuario@test.com",
@@ -42,119 +40,128 @@ class RefundValidationUnitTest(TestCase):
             category=self.category
         )
 
-        # Crear ticket
-        self.ticket = Ticket.objects.create(
+        # Creo diferentes TICKETS para las solicitudes de reembolso
+        # Un ticket para la solicitud pendiente (GENERAL)
+        self.ticket_general_pending = Ticket.objects.create(
             user=self.user,
             event=self.event,
             quantity=1,
-            type=Ticket.GENERAL # Usar la constante del modelo
+            type=Ticket.GENERAL
+        )
+        # Un ticket para la solicitud rechazada (VIP)
+        self.ticket_vip_rejected = Ticket.objects.create(
+            user=self.user,
+            event=self.event,
+            quantity=1,
+            type=Ticket.VIP
+        )
+        # Un ticket para la solicitud aprobada (GENERAL)
+        self.ticket_general_approved = Ticket.objects.create(
+            user=self.user,
+            event=self.event,
+            quantity=1,
+            type=Ticket.GENERAL
+        )
+
+        # Creo las instancias de RefundRequest con diferentes estados en setUp()
+        # Solicitud pendiente (activa)
+        self.refund_pending = RefundRequest.objects.create(
+            user=self.user,
+            ticket_code=self.ticket_general_pending.ticket_code,
+            reason="Solicitud pendiente creada en setUp",
+            event_name=self.event.title,
+            approval=None # Estado pendiente
+        )
+
+        # Solicitud rechazada
+        self.refund_rejected = RefundRequest.objects.create(
+            user=self.user,
+            ticket_code=self.ticket_vip_rejected.ticket_code, 
+            reason="Solicitud rechazada creada en setUp",
+            event_name=self.event.title,
+            approval=False # Estado rechazado
+        )
+
+        # Solicitud aprobada
+        self.refund_approved = RefundRequest.objects.create(
+            user=self.user,
+            ticket_code=self.ticket_general_approved.ticket_code,
+            reason="Solicitud aprobada creada en setUp",
+            event_name=self.event.title,
+            approval=True # Estado aprobado
         )
 
     def test_cannot_create_multiple_active_refunds(self):
         """
         Test que verifica que la lógica de conteo de solicitudes pendientes
         identifica correctamente la cantidad de solicitudes activas para un ticket.
-        (Este test NO intenta prevenir la creación a nivel de DB, sino contar lo que hay).
         """
-        # Crear la primera solicitud de reembolso
-        # La guardamos en una variable para poder referenciarla directamente
-        first_refund = RefundRequest.objects.create(
+        # Creo otra solicitud pendiente para el mismo ticket (self.ticket_general_pending).
+        
+        second_pending_for_same_ticket = RefundRequest.objects.create(
             user=self.user,
-            ticket_code=self.ticket.ticket_code,
-            reason="Razón de prueba 1",
+            ticket_code=self.ticket_general_pending.ticket_code, # Mismo ticket que self.refund_pending
+            reason="Segunda solicitud pendiente para el mismo ticket",
             event_name=self.event.title,
-            approval=None # Aseguramos que está pendiente
+            approval=None # pendiente
         )
 
-        # Intentar crear una segunda solicitud (a nivel de DB, esto es posible sin una restricción unique_together)
-        # La guardamos en otra variable
-        second_refund = RefundRequest.objects.create(
-            user=self.user,
-            ticket_code=self.ticket.ticket_code,
-            reason="Razón de prueba 2",
-            event_name=self.event.title,
-            approval=None # Aseguramos que también está pendiente
-        )
+        # Verificar que la primera y la segunda instancia están pendientes
+        self.assertIsNone(self.refund_pending.approval)
+        self.assertIsNone(second_pending_for_same_ticket.approval)
 
-        # Verificar que se crearon ambas instancias y que están pendientes
-        # Accediendo directamente a las variables que ya tenemos
-        self.assertIsNone(first_refund.approval)
-        self.assertIsNone(second_refund.approval)
-
-        # Verificar que la consulta de "solicitudes activas" (pendientes)
-        # para este usuario y ticket_code devuelve 2.
-        # Esto prueba que el filtro `approval__isnull=True` funciona como se espera
-        # para identificar múltiples solicitudes si la DB las permitiera.
+        # Verificar que la consulta de "solicitudes activas" para ese ticket devuelve 2
         active_refunds_count = RefundRequest.objects.filter(
             user=self.user,
-            ticket_code=self.ticket.ticket_code,
+            ticket_code=self.ticket_general_pending.ticket_code,
             approval__isnull=True # Filtro para solicitudes pendientes
         ).count()
         self.assertEqual(active_refunds_count, 2)
-
-        # NOTA: Este test unitario, tal como está, prueba que el ORM *puede* crear dos solicitudes
-        # y que tu filtro las contaría como activas. La prevención de duplicados ocurre en la vista.
-        # Si el objetivo de tus profesores era que este test unitario *fallara* al intentar crear la segunda
-        # solicitud, entonces necesitarías una restricción `unique_together` en tu modelo `RefundRequest`
-        # que incluya `user`, `ticket_code` y `approval__isnull=True`. Sin esa restricción,
-        # el `create` siempre tendrá éxito a nivel de DB.
-
+        
 
     def test_can_create_refund_after_rejected(self):
         """Test que verifica que se puede crear una nueva solicitud después de que una fue rechazada"""
-        # Crear y rechazar primera solicitud
-        refund1 = RefundRequest.objects.create(
+        # Ahora creo una nueva solicitud pendiente para el MISMO ticket que la rechazada.
+        new_refund = RefundRequest.objects.create(
             user=self.user,
-            ticket_code=self.ticket.ticket_code,
-            reason="Razón de prueba 1",
+            ticket_code=self.ticket_vip_rejected.ticket_code, # Mismo ticket que la rechazada
+            reason="Nueva solicitud después de una rechazada",
             event_name=self.event.title,
-            approval=False # Rechazada
+            approval=None # Debe estar pendiente
         )
-        # No necesitas refund1.save() si ya asignas approval=False en el create.
-        # Si lo haces en dos pasos:
-        # refund1 = RefundRequest.objects.create(...)
-        # refund1.approval = False
-        # refund1.save() # Aquí sí necesitas el save()
+        self.assertIsNone(new_refund.approval)
 
-        # Crear segunda solicitud
-        refund2 = RefundRequest.objects.create(
-            user=self.user,
-            ticket_code=self.ticket.ticket_code,
-            reason="Razón de prueba 2",
-            event_name=self.event.title,
-            approval=None # La nueva solicitud debe estar pendiente
-        )
-        self.assertIsNone(refund2.approval)  # La nueva solicitud debe estar pendiente
-
-        # Verificar que hay dos solicitudes en total para este ticket/usuario
-        self.assertEqual(RefundRequest.objects.filter(user=self.user, ticket_code=self.ticket.ticket_code).count(), 2)
-        # Y que solo una está pendiente (la segunda)
-        self.assertEqual(RefundRequest.objects.filter(user=self.user, ticket_code=self.ticket.ticket_code, approval__isnull=True).count(), 1)
+        # Verificar que ahora hay una rechazada y una pendiente para ese ticket
+        self.assertEqual(RefundRequest.objects.filter(
+            user=self.user, ticket_code=self.ticket_vip_rejected.ticket_code
+        ).count(), 2)
+        self.assertEqual(RefundRequest.objects.filter(
+            user=self.user, ticket_code=self.ticket_vip_rejected.ticket_code, approval=False # Solo la rechazada
+        ).count(), 1)
+        self.assertEqual(RefundRequest.objects.filter(
+            user=self.user, ticket_code=self.ticket_vip_rejected.ticket_code, approval__isnull=True # Solo la pendiente
+        ).count(), 1)
 
 
     def test_can_create_refund_after_approved(self):
         """Test que verifica que se puede crear una nueva solicitud después de que una fue aprobada"""
-        # Crear y aprobar primera solicitud
-        refund1 = RefundRequest.objects.create(
+        # Ahora creo una nueva solicitud pendiente para el MISMO ticket que la aprobada.
+        new_refund = RefundRequest.objects.create(
             user=self.user,
-            ticket_code=self.ticket.ticket_code,
-            reason="Razón de prueba 1",
+            ticket_code=self.ticket_general_approved.ticket_code, # Mismo ticket que la aprobada
+            reason="Nueva solicitud después de una aprobada",
             event_name=self.event.title,
-            approval=True # Aprobada
+            approval=None # Debe estar pendiente
         )
-        # No necesitas refund1.save() si ya asignas approval=True en el create.
+        self.assertIsNone(new_refund.approval)
 
-        # Crear segunda solicitud
-        refund2 = RefundRequest.objects.create(
-            user=self.user,
-            ticket_code=self.ticket.ticket_code,
-            reason="Razón de prueba 2",
-            event_name=self.event.title,
-            approval=None # La nueva solicitud debe estar pendiente
-        )
-        self.assertIsNone(refund2.approval)  # La nueva solicitud debe estar pendiente
-
-        # Verificar que hay dos solicitudes en total para este ticket/usuario
-        self.assertEqual(RefundRequest.objects.filter(user=self.user, ticket_code=self.ticket.ticket_code).count(), 2)
-        # Y que solo una está pendiente (la segunda)
-        self.assertEqual(RefundRequest.objects.filter(user=self.user, ticket_code=self.ticket.ticket_code, approval__isnull=True).count(), 1)
+        # Verificar que ahora hay una aprobada y una pendiente para ese ticket
+        self.assertEqual(RefundRequest.objects.filter(
+            user=self.user, ticket_code=self.ticket_general_approved.ticket_code
+        ).count(), 2)
+        self.assertEqual(RefundRequest.objects.filter(
+            user=self.user, ticket_code=self.ticket_general_approved.ticket_code, approval=True # Solo la aprobada
+        ).count(), 1)
+        self.assertEqual(RefundRequest.objects.filter(
+            user=self.user, ticket_code=self.ticket_general_approved.ticket_code, approval__isnull=True # Solo la pendiente
+        ).count(), 1)
