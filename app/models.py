@@ -729,7 +729,7 @@ class RefundRequest(models.Model):
             errors["ticket_code"] = "El código del ticket es requerido"
         if not reason:
             errors["reason"] = "El motivo es requerido"
-        if accepted_policy is None:
+        if not accepted_policy:
             errors["accepted_policy"] = "Debes aceptar la política de reembolsos"
         return errors
     
