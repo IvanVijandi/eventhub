@@ -47,6 +47,17 @@ class SatisfactionSurveyE2ETest(BaseE2ETest):
             user=self.user
         )
 
+        # Encuesta de satisfacción para tests
+        self.survey = SatisfactionSurvey.objects.create(
+            ticket=self.ticket,
+            user=self.user,
+            event=self.event,
+            overall_satisfaction=5,
+            purchase_experience='facil',
+            would_recommend=True,
+            comments='Excelente experiencia de compra!'
+        )
+
     def test_user_completes_satisfaction_survey(self):
         """Test que verifica que un usuario puede completar una encuesta de satisfacción"""
         # Login del usuario
@@ -74,17 +85,6 @@ class SatisfactionSurveyE2ETest(BaseE2ETest):
 
     def test_organizer_views_survey_results(self):
         """Test que verifica que un organizador puede ver los resultados de las encuestas"""
-        # Crear una encuesta de satisfacción
-        SatisfactionSurvey.objects.create(
-            ticket=self.ticket,
-            user=self.user,
-            event=self.event,
-            overall_satisfaction=5,
-            purchase_experience='facil',
-            would_recommend=True,
-            comments='Excelente experiencia de compra!'
-        )
-
         # Login como organizador
         self.login_user('organizador', 'password123')
 

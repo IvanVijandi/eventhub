@@ -49,7 +49,7 @@ class CountdownE2ETest(BaseE2ETest):
         )
 
     def test_countdown_visible_for_regular_users(self):
-        """Test que verifica que el countdown es visible para usuarios regulares"""
+        """Test que verifica que usuarios regulares pueden ver el countdown del evento"""
         # Login como usuario NO organizador
         self.login_user('usuario', 'password123')
         self.page.goto(f"{self.live_server_url}/events/{self.future_event.pk}/")
