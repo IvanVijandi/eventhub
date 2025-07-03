@@ -1,21 +1,28 @@
 from django.test import TestCase
 from django.utils import timezone
 import datetime
+from django.core.exceptions import ValidationError 
+from typing import cast 
 
 from app.models import User, Event, Venue, Category, Ticket, RefundRequest
+
 
 class RefundValidationUnitTest(TestCase):
     """Tests unitarios para la validación de solicitudes de reembolso"""
 
     def setUp(self):
-        # Crear usuario (el mismo para todas las solicitudes)
+        # Creo usuario (el mismo para todas las solicitudes)
         self.user = User.objects.create_user(
             username="usuario_test",
             email="usuario@test.com",
             password="password123"
         )
+        # Creo organizador (el mismo para todas las solicitudes)
+        self.organizer = User.objects.create_user(
+            username='organizer_test', email='organizer@test.com', password='password_org', is_organizer=True
+        )
 
-        # Crear venue y categoría
+        # Creo venue y categoría
         self.venue = Venue.objects.create(
             name="Venue de prueba",
             adress="Dirección de prueba",
@@ -30,32 +37,29 @@ class RefundValidationUnitTest(TestCase):
             is_active=True
         )
 
-        # Crear evento
+        # Creo evento
         self.event = Event.objects.create(
             title="Evento de prueba",
             description="Descripción del evento de prueba",
             scheduled_at=timezone.now() + datetime.timedelta(days=1),
-            organizer=self.user,
+            organizer=self.organizer,
             venue=self.venue,
             category=self.category
         )
 
         # Creo diferentes TICKETS para las solicitudes de reembolso
-        # Un ticket para la solicitud pendiente (GENERAL)
         self.ticket_general_pending = Ticket.objects.create(
             user=self.user,
             event=self.event,
             quantity=1,
             type=Ticket.GENERAL
         )
-        # Un ticket para la solicitud rechazada (VIP)
         self.ticket_vip_rejected = Ticket.objects.create(
             user=self.user,
             event=self.event,
             quantity=1,
             type=Ticket.VIP
         )
-        # Un ticket para la solicitud aprobada (GENERAL)
         self.ticket_general_approved = Ticket.objects.create(
             user=self.user,
             event=self.event,
@@ -63,105 +67,217 @@ class RefundValidationUnitTest(TestCase):
             type=Ticket.GENERAL
         )
 
-        # Creo las instancias de RefundRequest con diferentes estados en setUp()
-        # Solicitud pendiente (activa)
-        self.refund_pending = RefundRequest.objects.create(
+    def test_validate_successful_data(self):
+        """Verifica que RefundRequest.validate() retorna un diccionario vacío para datos válidos."""
+        errors = RefundRequest.validate(
             user=self.user,
-            ticket_code=self.ticket_general_pending.ticket_code,
-            reason="Solicitud pendiente creada en setUp",
-            event_name=self.event.title,
-            approval=None # Estado pendiente
+            ticket_code=str(self.ticket_general_pending.ticket_code),
+            reason="Motivo válido para reembolso",
+            accepted_policy=True
         )
+        self.assertEqual(errors, {})
 
-        # Solicitud rechazada
-        self.refund_rejected = RefundRequest.objects.create(
-            user=self.user,
-            ticket_code=self.ticket_vip_rejected.ticket_code, 
-            reason="Solicitud rechazada creada en setUp",
-            event_name=self.event.title,
-            approval=False # Estado rechazado
+    def test_validate_missing_user(self):
+        """Verifica que RefundRequest.validate() detecta la falta de usuario."""
+        errors = RefundRequest.validate(
+            user=None,
+            ticket_code=str(self.ticket_general_pending.ticket_code),
+            reason="Motivo válido",
+            accepted_policy=True
         )
+        self.assertIn("user", errors)
+        self.assertEqual(errors["user"], "El usuario es requerido")
 
-        # Solicitud aprobada
-        self.refund_approved = RefundRequest.objects.create(
+    def test_validate_missing_ticket_code(self):
+        """Verifica que RefundRequest.validate() detecta la falta de código de ticket."""
+        errors = RefundRequest.validate(
             user=self.user,
-            ticket_code=self.ticket_general_approved.ticket_code,
-            reason="Solicitud aprobada creada en setUp",
-            event_name=self.event.title,
-            approval=True # Estado aprobado
+            ticket_code="", # Código de ticket vacío
+            reason="Motivo válido",
+            accepted_policy=True
         )
+        self.assertIn("ticket_code", errors)
+        self.assertEqual(errors["ticket_code"], "El código del ticket es requerido")
+
+    def test_validate_missing_reason(self):
+        """Verifica que RefundRequest.validate() detecta la falta de motivo."""
+        errors = RefundRequest.validate(
+            user=self.user,
+            ticket_code=str(self.ticket_general_pending.ticket_code),
+            reason="", # Motivo vacío
+            accepted_policy=True
+        )
+        self.assertIn("reason", errors)
+        self.assertEqual(errors["reason"], "El motivo es requerido")
+
+    def test_validate_policy_not_accepted(self):
+        """Verifica que RefundRequest.validate() detecta si la política no fue aceptada."""
+        errors = RefundRequest.validate(
+            user=self.user,
+            ticket_code=str(self.ticket_general_pending.ticket_code),
+            reason="Motivo válido",
+            accepted_policy=False # Política no aceptada
+        )
+        self.assertIn("accepted_policy", errors)
+        self.assertEqual(errors["accepted_policy"], "Debes aceptar la política de reembolsos")
+
+    def test_new_successful_creation(self):
+        """Verifica que RefundRequest.new() crea una solicitud exitosamente y en estado pendiente."""
+        initial_count = RefundRequest.objects.count()
+        success, result = RefundRequest.new(
+            user=self.user,
+            ticket_code=str(self.ticket_general_pending.ticket_code),
+            reason="Creación exitosa de solicitud",
+            accepted_policy=True,
+            additional_details="Detalles opcionales",
+            event_name=self.event.title
+        )
+        self.assertTrue(success, f"La creación debería ser exitosa, pero falló con: {result}")
+        
+        refund_request = cast(RefundRequest, result)
+
+        self.assertIsInstance(refund_request, RefundRequest)
+        self.assertEqual(RefundRequest.objects.count(), initial_count + 1)
+        self.assertEqual(refund_request.user, self.user)
+        self.assertEqual(refund_request.ticket_code, str(self.ticket_general_pending.ticket_code))
+        self.assertIsNone(refund_request.approval)
+        self.assertIsNone(refund_request.approval_date)
+
+    def test_new_with_validation_errors(self):
+        """Verifica que RefundRequest.new() retorna False y errores si los datos no son válidos."""
+        initial_count = RefundRequest.objects.count()
+        success, raw_errors = RefundRequest.new(
+            user=None, # Dato inválido
+            ticket_code=str(self.ticket_general_pending.ticket_code),
+            reason="Motivo",
+            accepted_policy=True
+        )
+        self.assertFalse(success)
+        
+        errors = cast(dict, raw_errors) 
+        
+        self.assertIn("user", errors)
+        self.assertEqual(RefundRequest.objects.count(), initial_count)
 
     def test_cannot_create_multiple_active_refunds(self):
         """
-        Test que verifica que la lógica de conteo de solicitudes pendientes
-        identifica correctamente la cantidad de solicitudes activas para un ticket.
+        Test que verifica que RefundRequest.new() previene la creación de múltiples solicitudes
+        de reembolso activas para el mismo ticket y usuario.
         """
-        # Creo otra solicitud pendiente para el mismo ticket (self.ticket_general_pending).
-        
-        second_pending_for_same_ticket = RefundRequest.objects.create(
+        initial_count = RefundRequest.objects.count()
+
+        # Creo la primera solicitud pendiente
+        success1, result1 = RefundRequest.new(
             user=self.user,
-            ticket_code=self.ticket_general_pending.ticket_code, # Mismo ticket que self.refund_pending
-            reason="Segunda solicitud pendiente para el mismo ticket",
-            event_name=self.event.title,
-            approval=None # pendiente
+            ticket_code=str(self.ticket_general_pending.ticket_code),
+            reason="Primera solicitud pendiente",
+            accepted_policy=True,
+            event_name=self.event.title
         )
+        self.assertTrue(success1, "La primera solicitud debería crearse exitosamente.")
+        self.assertEqual(RefundRequest.objects.count(), initial_count + 1)
 
-        # Verificar que la primera y la segunda instancia están pendientes
-        self.assertIsNone(self.refund_pending.approval)
-        self.assertIsNone(second_pending_for_same_ticket.approval)
-
-        # Verificar que la consulta de "solicitudes activas" para ese ticket devuelve 2
-        active_refunds_count = RefundRequest.objects.filter(
+        # Intento creao una segunda solicitud pendiente para el mismo ticket
+        success2, raw_errors = RefundRequest.new(
             user=self.user,
-            ticket_code=self.ticket_general_pending.ticket_code,
-            approval__isnull=True # Filtro para solicitudes pendientes
-        ).count()
-        self.assertEqual(active_refunds_count, 2)
+            ticket_code=str(self.ticket_general_pending.ticket_code),
+            reason="Segunda solicitud que debería ser bloqueada",
+            accepted_policy=True,
+            event_name=self.event.title
+        )
+        self.assertFalse(success2, "La segunda solicitud duplicada NO debería crearse.")
         
+        errors = cast(dict, raw_errors)
+
+        self.assertIn("ticket_code", errors)
+        self.assertEqual(errors["ticket_code"], "Ya existe una solicitud pendiente para este ticket")
+        self.assertEqual(RefundRequest.objects.count(), initial_count + 1)
 
     def test_can_create_refund_after_rejected(self):
-        """Test que verifica que se puede crear una nueva solicitud después de que una fue rechazada"""
-        # Ahora creo una nueva solicitud pendiente para el MISMO ticket que la rechazada.
-        new_refund = RefundRequest.objects.create(
-            user=self.user,
-            ticket_code=self.ticket_vip_rejected.ticket_code, # Mismo ticket que la rechazada
-            reason="Nueva solicitud después de una rechazada",
-            event_name=self.event.title,
-            approval=None # Debe estar pendiente
-        )
-        self.assertIsNone(new_refund.approval)
+        """Test que verifica que se puede crear una nueva solicitud después de que una fue rechazada."""
+        initial_count = RefundRequest.objects.count()
 
-        # Verificar que ahora hay una rechazada y una pendiente para ese ticket
+        # Creo y rechazo la primera solicitud
+        refund1 = RefundRequest.objects.create(
+            user=self.user,
+            ticket_code=str(self.ticket_vip_rejected.ticket_code),
+            reason="Primera solicitud rechazada",
+            accepted_policy=True,
+            event_name=self.event.title,
+            approval=False, # Estado rechazado
+            approval_date=timezone.now().date()
+        )
+        self.assertFalse(refund1.approval)
+        self.assertEqual(RefundRequest.objects.count(), initial_count + 1)
+
+        # Ahora creo una nueva solicitud pendiente para el MISMO ticket
+        success2, result2 = RefundRequest.new(
+            user=self.user,
+            ticket_code=str(self.ticket_vip_rejected.ticket_code),
+            reason="Nueva solicitud después de una rechazada",
+            accepted_policy=True,
+            event_name=self.event.title
+        )
+        self.assertTrue(success2, f"La nueva solicitud debería crearse después del rechazo, pero falló con: {result2}")
+        
+        new_refund = cast(RefundRequest, result2)
+
+        self.assertIsInstance(new_refund, RefundRequest)
+        self.assertIsNone(new_refund.approval)
+        self.assertEqual(RefundRequest.objects.count(), initial_count + 2)
+
+        # Verificar conteos finales para este ticket
         self.assertEqual(RefundRequest.objects.filter(
-            user=self.user, ticket_code=self.ticket_vip_rejected.ticket_code
+            user=self.user, ticket_code=str(self.ticket_vip_rejected.ticket_code)
         ).count(), 2)
         self.assertEqual(RefundRequest.objects.filter(
-            user=self.user, ticket_code=self.ticket_vip_rejected.ticket_code, approval=False # Solo la rechazada
+            user=self.user, ticket_code=str(self.ticket_vip_rejected.ticket_code), approval=False
         ).count(), 1)
         self.assertEqual(RefundRequest.objects.filter(
-            user=self.user, ticket_code=self.ticket_vip_rejected.ticket_code, approval__isnull=True # Solo la pendiente
+            user=self.user, ticket_code=str(self.ticket_vip_rejected.ticket_code), approval__isnull=True
         ).count(), 1)
 
 
     def test_can_create_refund_after_approved(self):
-        """Test que verifica que se puede crear una nueva solicitud después de que una fue aprobada"""
-        # Ahora creo una nueva solicitud pendiente para el MISMO ticket que la aprobada.
-        new_refund = RefundRequest.objects.create(
-            user=self.user,
-            ticket_code=self.ticket_general_approved.ticket_code, # Mismo ticket que la aprobada
-            reason="Nueva solicitud después de una aprobada",
-            event_name=self.event.title,
-            approval=None # Debe estar pendiente
-        )
-        self.assertIsNone(new_refund.approval)
+        """Test que verifica que se puede crear una nueva solicitud después de que una fue aprobada."""
+        initial_count = RefundRequest.objects.count()
 
-        # Verificar que ahora hay una aprobada y una pendiente para ese ticket
+        # Creo y apruebo la primera solicitud
+        refund1 = RefundRequest.objects.create(
+            user=self.user,
+            ticket_code=str(self.ticket_general_approved.ticket_code),
+            reason="Primera solicitud aprobada",
+            accepted_policy=True,
+            event_name=self.event.title,
+            approval=True,
+            approval_date=timezone.now().date()
+        )
+        self.assertTrue(refund1.approval)
+        self.assertEqual(RefundRequest.objects.count(), initial_count + 1)
+
+        # Ahora creo una nueva solicitud pendiente para el MISMO ticket
+        success2, result2 = RefundRequest.new(
+            user=self.user,
+            ticket_code=str(self.ticket_general_approved.ticket_code),
+            reason="Nueva solicitud después de una aprobada",
+            accepted_policy=True,
+            event_name=self.event.title
+        )
+        self.assertTrue(success2, f"La nueva solicitud debería crearse después de la aprobación, pero falló con: {result2}")
+        
+        new_refund = cast(RefundRequest, result2)
+
+        self.assertIsInstance(new_refund, RefundRequest)
+        self.assertIsNone(new_refund.approval)
+        self.assertEqual(RefundRequest.objects.count(), initial_count + 2)
+
+        # Verifico conteos finales para este ticket
         self.assertEqual(RefundRequest.objects.filter(
-            user=self.user, ticket_code=self.ticket_general_approved.ticket_code
+            user=self.user, ticket_code=str(self.ticket_general_approved.ticket_code)
         ).count(), 2)
         self.assertEqual(RefundRequest.objects.filter(
-            user=self.user, ticket_code=self.ticket_general_approved.ticket_code, approval=True # Solo la aprobada
+            user=self.user, ticket_code=str(self.ticket_general_approved.ticket_code), approval=True
         ).count(), 1)
         self.assertEqual(RefundRequest.objects.filter(
-            user=self.user, ticket_code=self.ticket_general_approved.ticket_code, approval__isnull=True # Solo la pendiente
+            user=self.user, ticket_code=str(self.ticket_general_approved.ticket_code), approval__isnull=True
         ).count(), 1)
