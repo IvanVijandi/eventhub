@@ -710,8 +710,54 @@ class RefundRequest(models.Model):
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="refund_requests")
 
+    class Meta:
+        verbose_name= "Solicitud de Reembolso"
+        verbose_name_plural = "Solicitudes de Reembolso"
+        ordering = ["-created_at"]
+
     def __str__(self):
         return f"Refund Request for Ticket: {self.ticket_code}"
+
+    @classmethod
+    def validate(cls, user, ticket_code, reason, accepted_policy):
+        """Validar datos de la solicitud de reembolso."""
+        errors = {}
+
+        if not user:
+            errors["user"] = "El usuario es requerido"
+        if not ticket_code:
+            errors["ticket_code"] = "El código del ticket es requerido"
+        if not reason:
+            errors["reason"] = "El motivo es requerido"
+        if not accepted_policy:
+            errors["accepted_policy"] = "Debes aceptar la política de reembolsos"
+        return errors
+    
+    @classmethod
+    def new(cls, user, ticket_code, reason, accepted_policy, additional_details=None, event_name=None):
+        """Crear una nueva solicitud de reembolso con validacion."""
+        errors = cls.validate(user, ticket_code, reason, accepted_policy)
+        if errors:
+            return False, errors
+        # Verificar si ya existe una solicitud pendiente para este ticket
+        existing_request = cls.objects.filter(user=user, ticket_code=ticket_code, approval__isnull=True).exists()
+
+        if existing_request:
+            errors["ticket_code"] = "Ya existe una solicitud pendiente para este ticket"
+            return False, errors
+        try:
+            refund_request = cls.objects.create(
+                user=user,
+                ticket_code=ticket_code,
+                reason=reason,
+                accepted_policy=accepted_policy,
+                additional_details=additional_details,
+                event_name=event_name,
+                approval=None,  # Estado pendiente
+            )
+            return True, refund_request
+        except Exception as e:
+            return False, {"error": f"Error al crear solicitud de reembolso: {str(e)}"}
 
 
 class SatisfactionSurvey(models.Model):
